@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comète Claude</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --space: #060917;
+    --ice: #9fe8ff;
+    --warm: #ffb36b;
+    --dust: #ffe39a;
+    --danger: #ff5d73;
+    --text: #e8ecff;
+    --muted: #8d95c4;
+    --glass: rgba(10, 14, 38, 0.74);
+    --edge: rgba(159, 232, 255, 0.2);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--space);
+    color: var(--text);
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    overflow: hidden;
+  }
+  .stage { position: relative; height: 100%; }
+  canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    padding: 14px 16px;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted);
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud b { display: block; font-size: 18px; letter-spacing: 0; color: var(--text); font-weight: 600; }
+  .hud .score b { color: var(--ice); }
+  .panel {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 16px;
+  }
+  .card {
+    width: 100%; max-width: 440px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    padding: 28px 24px;
+    display: grid; gap: 18px;
+  }
+  .eyebrow { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ice); }
+  h1, h2 {
+    font-family: "Unbounded", system-ui, sans-serif;
+    font-weight: 800; line-height: 1.02; margin: 0;
+    text-wrap: balance;
+    background: linear-gradient(90deg, var(--ice), var(--warm));
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+  }
+  h1 { font-size: clamp(32px, 9vw, 46px); }
+  h2 { font-size: clamp(26px, 7vw, 34px); }
+  p { margin: 0; line-height: 1.6; font-size: 14px; }
+  .fact { font-size: 12px; color: var(--muted); border-left: 2px solid var(--warm); padding-left: 10px; }
+  .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+  .legend li { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--dust); box-shadow: 0 0 10px var(--dust); flex: none; }
+  .rock { width: 14px; height: 14px; background: #2b3363; border: 1px solid var(--edge); clip-path: polygon(30% 0, 80% 8%, 100% 50%, 78% 95%, 25% 100%, 0 55%); flex: none; }
+  .keys { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  button {
+    justify-self: start;
+    font: 600 15px "Unbounded", system-ui, sans-serif;
+    border: 0; border-radius: 999px;
+    padding: 14px 24px;
+    background: var(--ice); color: #06122a;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  button:hover { background: #c4f2ff; transform: translateY(-1px); }
+  button:focus-visible { outline: 3px solid var(--warm); outline-offset: 3px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stats div { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .stats b { display: block; font-size: 20px; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .record { color: var(--warm); font-weight: 600; font-size: 13px; }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <canvas id="cv" aria-label="Zone de jeu : une comète traverse un champ d'astéroïdes"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="score">Score<b id="hScore">0</b></div>
+    <div>Distance<b id="hDist">0,00 UA</b></div>
+    <div>Vitesse<b id="hSpeed">44 km/s</b></div>
+    <div>Poussière<b id="hDust">0</b></div>
+  </div>
+
+  <div class="panel" id="menu">
+    <div class="card">
+      <div class="eyebrow">Mini-jeu · créé par Claude</div>
+      <h1>Comète Claude</h1>
+      <p>Vous pilotez une comète à travers la ceinture d'astéroïdes. Plus vous allez loin, plus elle accélère.</p>
+      <ul class="legend">
+        <li><span class="dot"></span>Poussière d'étoile : +25 points</li>
+        <li><span class="rock"></span>Astéroïde : un seul choc et c'est fini</li>
+      </ul>
+      <p class="keys">Glissez le doigt ou bougez la souris.<br>Au clavier : flèches ou ZQSD.</p>
+      <button id="play" type="button">Décoller</button>
+      <p class="fact">La comète Hale-Bopp filait à environ 44 km/s près du Soleil. Votre comète part à cette vitesse.</p>
+    </div>
+  </div>
+
+  <div class="panel" id="over" hidden>
+    <div class="card">
+      <div class="eyebrow">Impact</div>
+      <h2>Collision !</h2>
+      <div class="stats">
+        <div>Score<b id="oScore">0</b></div>
+        <div>Distance<b id="oDist">0</b></div>
+        <div>Record<b id="oBest">0</b></div>
+      </div>
+      <p class="record" id="oRecord" hidden>Nouveau record !</p>
+      <button id="again" type="button">Rejouer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const hud = $('hud'), menu = $('menu'), over = $('over');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt = n => n.toLocaleString('fr-FR');
+
+  let W = 0, H = 0;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  const stars = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), z: rand(0.15, 1) }));
+  const P = { x: W * 0.3, y: H * 0.5, tx: 0, ty: 0, r: 9 };
+  const keys = { up: false, down: false, left: false, right: false };
+
+  let state = 'menu', t = 0, speed = 180, dist = 0, dust = 0, shake = 0;
+  let rocks = [], orbs = [], parts = [];
+  let spawnR = 0.5, spawnO = 0.4;
+  let best = 0;
+  try { best = Number(localStorage.getItem('comete-best')) || 0; } catch (e) {}
+
+  const score = () => Math.floor(dist / 20) + dust * 25;
+  const kms = () => Math.round(speed * 0.19);
+  const ua = () => (dist / 40000).toFixed(2).replace('.', ',');
+
+  function spawnRock() {
+    const r = rand(14, 38);
+    const n = 9, verts = [];
+    for (let i = 0; i < n; i++) verts.push(r * rand(0.72, 1.1));
+    rocks.push({ x: W + r + 10, y: rand(40, H - 20), r, verts, v: rand(0.75, 1.35), a: rand(0, 6.3), spin: rand(-1.4, 1.4), dy: rand(-18, 18) });
+  }
+  function spawnOrb() {
+    orbs.push({ x: W + 20, y: rand(70, H - 30), r: 6, ph: rand(0, 6.3) });
+  }
+  function burst(x, y, col, n, power) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(40, power);
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0, max: rand(0.4, 1), s: rand(1.5, 4), col });
+    }
+  }
+
+  function start() {
+    rocks = []; orbs = []; parts = [];
+    t = 0; speed = 230; dist = 0; dust = 0; shake = 0;
+    spawnR = 0.9; spawnO = 0.3;
+    P.x = P.tx = W * 0.25; P.y = P.ty = H * 0.5;
+    state = 'play';
+    menu.hidden = true; over.hidden = true; hud.hidden = false;
+    cv.focus?.();
+  }
+
+  function crash() {
+    state = 'over';
+    if (!reduce) shake = 14;
+    burst(P.x, P.y, '#ff5d73', 40, 320);
+    burst(P.x, P.y, '#9fe8ff', 30, 220);
+    const s = score();
+    const isRecord = s > best;
+    if (isRecord) {
+      best = s;
+      try { localStorage.setItem('comete-best', String(best)); } catch (e) {}
+    }
+    $('oScore').textContent = fmt(s);
+    $('oDist').textContent = ua() + ' UA';
+    $('oBest').textContent = fmt(best);
+    $('oRecord').hidden = !isRecord;
+    setTimeout(() => {
+      hud.hidden = true; over.hidden = false;
+      $('again').focus();
+    }, 800);
+  }
+
+  function update(dt) {
+    t += dt;
+
+    if (state === 'play') {
+      speed = 230 + t * 7;
+      const kx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      const ky = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+      if (kx || ky) { P.tx += kx * 440 * dt; P.ty += ky * 440 * dt; }
+      P.tx = clamp(P.tx, 20, W - 20); P.ty = clamp(P.ty, 60, H - 20);
+      const k = Math.min(1, dt * 9);
+      P.x += (P.tx - P.x) * k; P.y += (P.ty - P.y) * k;
+      dist += speed * dt;
+    } else if (state === 'menu') {
+      speed = 180;
+      P.x = W * 0.3 + Math.sin(t * 0.7) * W * 0.1;
+      P.y = H * 0.5 + Math.sin(t * 1.3) * H * 0.22;
+    } else {
+      speed *= Math.pow(0.25, dt);
+    }
+
+    if (state !== 'over') {
+      spawnR -= dt;
+      if (spawnR <= 0) {
+        spawnRock();
+        const base = state === 'play' ? Math.max(0.26, 1.05 - t * 0.02) : 1.3;
+        spawnR = base * rand(0.6, 1.25) * clamp(700 / H, 0.6, 1.4);
+      }
+      spawnO -= dt;
+      if (spawnO <= 0) { spawnOrb(); spawnO = rand(0.35, 0.85); }
+
+      const n = reduce ? 1 : 3;
+      for (let i = 0; i < n; i++) {
+        parts.push({ x: P.x + rand(-2, 2), y: P.y + rand(-2, 2), vx: -speed * rand(0.35, 0.75) - rand(0, 40), vy: rand(-26, 26), life: 0, max: rand(0.5, 1.05), s: rand(2, 5.5) });
+      }
+    }
+
+    for (const s of stars) {
+      s.x -= speed * s.z * dt * 0.35 / Math.max(W, 1);
+      if (s.x < 0) { s.x += 1; s.y = Math.random(); }
+    }
+    for (const r of rocks) { r.x -= r.v * speed * dt; r.y += r.dy * dt; r.a += r.spin * dt; }
+    rocks = rocks.filter(r => r.x > -r.r - 20);
+    for (const o of orbs) { o.x -= speed * dt * 0.9; o.ph += dt * 4; }
+    orbs = orbs.filter(o => o.x > -20);
+    for (const p of parts) { p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.985; p.vy *= 0.985; }
+    parts = parts.filter(p => p.life < p.max);
+
+    if (state === 'play') {
+      for (const r of rocks) {
+        if (Math.hypot(r.x - P.x, r.y - P.y) < r.r * 0.82 + P.r * 0.7) { crash(); break; }
+      }
+      for (let i = orbs.length - 1; i >= 0; i--) {
+        const o = orbs[i];
+        if (Math.hypot(o.x - P.x, o.y - P.y) < o.r + P.r + 8) {
+          dust++;
+          burst(o.x, o.y, '#ffe39a', reduce ? 4 : 12, 140);
+          orbs.splice(i, 1);
+        }
+      }
+      $('hScore').textContent = fmt(score());
+      $('hDist').textContent = ua() + ' UA';
+      $('hSpeed').textContent = kms() + ' km/s';
+      $('hDust').textContent = dust;
+    }
+  }
+
+  function draw(dt) {
+    ctx.save();
+    if (shake > 0) {
+      ctx.translate(rand(-shake, shake), rand(-shake, shake));
+      shake *= Math.pow(0.02, dt);
+      if (shake < 0.3) shake = 0;
+    }
+
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0c1236'); g.addColorStop(1, '#04060f');
+    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+
+    const neb = ctx.createRadialGradient(W * 0.78, H * 0.28, 0, W * 0.78, H * 0.28, Math.max(W, H) * 0.55);
+    neb.addColorStop(0, 'rgba(120, 70, 190, 0.22)'); neb.addColorStop(1, 'rgba(120, 70, 190, 0)');
+    ctx.fillStyle = neb; ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#dfe6ff';
+    for (const s of stars) {
+      const size = s.z * 1.8;
+      ctx.globalAlpha = 0.25 + s.z * 0.7;
+      ctx.fillRect(s.x * W, s.y * H, size + speed * s.z * 0.012, size);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const o of orbs) {
+      const pr = o.r * (1 + Math.sin(o.ph) * 0.18);
+      const og = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, pr * 3.2);
+      og.addColorStop(0, 'rgba(255, 244, 200, 1)');
+      og.addColorStop(0.3, 'rgba(255, 227, 154, 0.8)');
+      og.addColorStop(1, 'rgba(255, 179, 107, 0)');
+      ctx.fillStyle = og;
+      ctx.beginPath(); ctx.arc(o.x, o.y, pr * 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    for (const r of rocks) {
+      ctx.save();
+      ctx.translate(r.x, r.y); ctx.rotate(r.a);
+      ctx.beginPath();
+      r.verts.forEach((d, i) => {
+        const a = (i / r.verts.length) * Math.PI * 2;
+        i ? ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d) : ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d);
+      });
+      ctx.closePath();
+      ctx.fillStyle = '#262d5a'; ctx.fill();
+      ctx.strokeStyle = 'rgba(159, 232, 255, 0.28)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = 'rgba(8, 10, 28, 0.55)';
+      ctx.beginPath(); ctx.arc(r.r * 0.25, -r.r * 0.2, r.r * 0.22, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-r.r * 0.3, r.r * 0.3, r.r * 0.14, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of parts) {
+      const k = p.life / p.max;
+      ctx.globalAlpha = (1 - k) * 0.85;
+      ctx.fillStyle = p.col || `hsl(${193 + 196 * k}, 100%, ${78 - k * 18}%)`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (1 - k * 0.6), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    if (state !== 'over') {
+      const hg = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, P.r * 3.4);
+      hg.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      hg.addColorStop(0.28, 'rgba(159, 232, 255, 0.9)');
+      hg.addColorStop(1, 'rgba(159, 232, 255, 0)');
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(P.x, P.y, P.r * 3.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    if (state !== 'over') {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(P.x, P.y, P.r * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  function aim(e) {
+    if (state !== 'play') return;
+    const b = cv.getBoundingClientRect();
+    P.tx = e.clientX - b.left;
+    P.ty = e.clientY - b.top - (e.pointerType === 'touch' ? 44 : 0);
+  }
+  cv.addEventListener('pointermove', aim);
+  cv.addEventListener('pointerdown', aim);
+
+  const map = { ArrowUp: 'up', z: 'up', w: 'up', ArrowDown: 'down', s: 'down', ArrowLeft: 'left', q: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
+  addEventListener('keydown', e => {
+    const k = map[e.key] || map[e.key.toLowerCase?.()];
+    if (k) { keys[k] = true; e.preventDefault(); return; }
+    if ((e.key === ' ' || e.key === 'Enter') && state !== 'play' && e.target.tagName !== 'BUTTON') {
+      if (state === 'menu' || !over.hidden) { e.preventDefault(); start(); }
+    }
+  });
+  addEventListener('keyup', e => {
+    const k = map[e.key] || map[e.key.toLowerCase?.()];
+    if (k) keys[k] = false;
+  });
+
+  $('play').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+})();
+</script>
+</body>
+</html>
